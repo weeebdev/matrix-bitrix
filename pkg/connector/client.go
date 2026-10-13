@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog"
 	"go.mau.fi/util/ptr"
@@ -16,7 +17,7 @@ import (
 	"maunium.net/go/mautrix/bridgev2/status"
 	"maunium.net/go/mautrix/event"
 
-	"github.com/adil/mautrix-bitrix/pkg/bitrix"
+	"github.com/weeebdev/mautrix-bitrix/pkg/bitrix"
 )
 
 type BitrixClient struct {
@@ -211,7 +212,9 @@ func (bc *BitrixClient) syncRecentChats(ctx context.Context) {
 	}
 	for _, item := range recent.Items {
 		dialogID := string(item.ID)
-		if dialogID == "" || item.Type == "notification" {
+		// Recent also lists colleagues you've never talked to (e.g. new employees);
+		// rooms for those are created when the first real message arrives.
+		if dialogID == "" || item.Type == "notification" || item.Message.ID == 0 {
 			continue
 		}
 		bc.rememberDialog(int64(item.ChatID), dialogID)
@@ -234,7 +237,7 @@ func (bc *BitrixClient) syncRecentChats(ctx context.Context) {
 		})
 		// Mirror Bitrix's read state: chats read elsewhere (or before the bridge existed) are
 		// marked read on Matrix up to their last message.
-		if item.Counter == 0 && !item.Unread && item.Message.ID != 0 {
+		if item.Counter == 0 && !item.Unread {
 			bc.UserLogin.Bridge.QueueRemoteEvent(bc.UserLogin, &simplevent.Receipt{
 				EventMeta: simplevent.EventMeta{
 					Type:      bridgev2.RemoteEventReadReceipt,
@@ -243,6 +246,7 @@ func (bc *BitrixClient) syncRecentChats(ctx context.Context) {
 					Timestamp: ts,
 				},
 				LastTarget: makeMessageID(int64(item.Message.ID)),
+				ReadUpTo:   time.Now(),
 			})
 		}
 	}
