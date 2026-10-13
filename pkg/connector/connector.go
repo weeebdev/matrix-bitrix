@@ -12,6 +12,7 @@ import (
 	"maunium.net/go/mautrix/bridgev2/commands"
 	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/bridgev2/networkid"
+	"maunium.net/go/mautrix/event"
 
 	"github.com/weeebdev/mautrix-bitrix/pkg/bitrix"
 )
@@ -103,6 +104,13 @@ type UserLoginMetadata struct {
 	KeepDeleted *bool `json:"keep_deleted,omitempty"`
 }
 
+// MessageMetadata keeps the bridged content of each message part, so a message deleted in
+// Bitrix can be marked as deleted in place instead of disappearing.
+type MessageMetadata struct {
+	Content *event.MessageEventContent `json:"content,omitempty"`
+	Deleted bool                       `json:"deleted,omitempty"`
+}
+
 type PortalMetadata struct {
 	ChatID       int64 `json:"chat_id,omitempty"`
 	DiskFolderID int64 `json:"disk_folder_id,omitempty"`
@@ -112,7 +120,7 @@ func (bc *BitrixConnector) GetDBMetaTypes() database.MetaTypes {
 	return database.MetaTypes{
 		Portal:    func() any { return &PortalMetadata{} },
 		Ghost:     nil,
-		Message:   nil,
+		Message:   func() any { return &MessageMetadata{} },
 		Reaction:  nil,
 		UserLogin: func() any { return &UserLoginMetadata{} },
 	}

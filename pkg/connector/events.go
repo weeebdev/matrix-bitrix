@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
 	"maunium.net/go/mautrix/bridgev2"
+	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/bridgev2/networkid"
 	"maunium.net/go/mautrix/bridgev2/simplevent"
 	"maunium.net/go/mautrix/event"
@@ -271,35 +273,106 @@ func (bc *BitrixClient) handleMessageDelete(ctx context.Context, raw json.RawMes
 	return nil
 }
 
-// markDeleted keeps a message deleted in Bitrix and replies to it with a notice instead.
+// markDeleted keeps a message deleted in Bitrix and marks it as deleted in place: text parts are
+// struck through, file parts keep their file with a marked caption. Messages bridged before content
+// was stored in metadata get a reply notice instead.
 func (bc *BitrixClient) markDeleted(ctx context.Context, key networkid.PortalKey, messageID, senderID int64) error {
+	parts, err := bc.UserLogin.Bridge.DB.Message.GetAllPartsByID(ctx, bc.UserLogin.ID, makeMessageID(messageID))
+	if err != nil {
+		return err
+	}
+	canEdit := false
+	for _, part := range parts {
+		meta, ok := part.Metadata.(*MessageMetadata)
+		if ok && meta.Deleted {
+			return nil // messageDelete and messageDeleteComplete both arrive for one delete
+		} else if ok && meta.Content != nil {
+			canEdit = true
+		}
+	}
+	if !canEdit {
+		return bc.replyDeleted(ctx, key, messageID)
+	}
+	bc.UserLogin.Bridge.QueueRemoteEvent(bc.UserLogin, &simplevent.Message[int64]{
+		EventMeta: simplevent.EventMeta{
+			Type:      bridgev2.RemoteEventEdit,
+			PortalKey: key,
+			Sender:    bc.sender(senderID),
+			Timestamp: time.Now(),
+		},
+		Data:          messageID,
+		ID:            makeMessageID(messageID),
+		TargetMessage: makeMessageID(messageID),
+		ConvertEditFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, existing []*database.Message, _ int64) (*bridgev2.ConvertedEdit, error) {
+			edit := &bridgev2.ConvertedEdit{}
+			for _, part := range existing {
+				meta, ok := part.Metadata.(*MessageMetadata)
+				if !ok || meta.Content == nil || meta.Deleted {
+					continue
+				}
+				edit.ModifiedParts = append(edit.ModifiedParts, &bridgev2.ConvertedEditPart{
+					Part:    part,
+					Type:    event.EventMessage,
+					Content: deletedContent(meta.Content),
+				})
+				meta.Deleted = true
+			}
+			if len(edit.ModifiedParts) == 0 {
+				return nil, fmt.Errorf("%w: nothing to mark as deleted", bridgev2.ErrIgnoringRemoteEvent)
+			}
+			return edit, nil
+		},
+	})
+	return nil
+}
+
+const deletedLabel = "🗑 deleted in Bitrix"
+
+// deletedContent returns a copy of content marked as deleted.
+func deletedContent(orig *event.MessageEventContent) *event.MessageEventContent {
+	c := *orig
+	c.Mentions = &event.Mentions{}
+	switch c.MsgType {
+	case event.MsgText, event.MsgNotice, event.MsgEmote:
+		formatted := c.FormattedBody
+		if c.Format != event.FormatHTML || formatted == "" {
+			formatted = strings.ReplaceAll(html.EscapeString(c.Body), "\n", "<br/>")
+		}
+		c.Format = event.FormatHTML
+		c.FormattedBody = "<del>" + formatted + "</del><br/><em>" + deletedLabel + "</em>"
+		c.Body = "~~" + c.Body + "~~\n" + deletedLabel
+	default:
+		// Media: keep the file, mark the caption
+		name := c.FileName
+		if name == "" {
+			name = c.Body
+		}
+		c.FileName = name
+		c.Body = name + " (" + deletedLabel + ")"
+		c.Format, c.FormattedBody = "", ""
+	}
+	return &c
+}
+
+func (bc *BitrixClient) replyDeleted(ctx context.Context, key networkid.PortalKey, messageID int64) error {
 	noticeID := networkid.MessageID(fmt.Sprintf("deleted-%d", messageID))
 	if existing, err := bc.UserLogin.Bridge.DB.Message.GetFirstPartByID(ctx, bc.UserLogin.ID, noticeID); err == nil && existing != nil {
-		return nil // messageDelete and messageDeleteComplete both arrive for one delete
+		return nil
 	}
-	who := "the sender"
-	if senderID == bc.client.UserID {
-		who = "you"
-	} else if ghost, err := bc.UserLogin.Bridge.GetExistingGhostByID(ctx, makeUserID(senderID)); err == nil && ghost != nil && ghost.Name != "" {
-		who = ghost.Name
-	}
-	bc.UserLogin.Bridge.QueueRemoteEvent(bc.UserLogin, &simplevent.Message[string]{
+	bc.UserLogin.Bridge.QueueRemoteEvent(bc.UserLogin, &simplevent.Message[int64]{
 		EventMeta: simplevent.EventMeta{
 			Type:      bridgev2.RemoteEventMessage,
 			PortalKey: key,
 			Timestamp: time.Now(),
 		},
-		Data: who,
+		Data: messageID,
 		ID:   noticeID,
-		ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, who string) (*bridgev2.ConvertedMessage, error) {
+		ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, _ int64) (*bridgev2.ConvertedMessage, error) {
 			return &bridgev2.ConvertedMessage{
 				ReplyTo: &networkid.MessageOptionalPartID{MessageID: makeMessageID(messageID)},
 				Parts: []*bridgev2.ConvertedMessagePart{{
-					Type: event.EventMessage,
-					Content: &event.MessageEventContent{
-						MsgType: event.MsgNotice,
-						Body:    fmt.Sprintf("🗑 Deleted in Bitrix by %s", who),
-					},
+					Type:    event.EventMessage,
+					Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: "🗑 This message was deleted in Bitrix"},
 				}},
 			}, nil
 		},

@@ -1,6 +1,10 @@
 package connector
 
-import "testing"
+import (
+	"testing"
+
+	"maunium.net/go/mautrix/event"
+)
 
 func TestSettings(t *testing.T) {
 	var meta UserLoginMetadata
@@ -19,5 +23,20 @@ func TestSettings(t *testing.T) {
 	}
 	if _, ok := boolArg([]string{"maybe"}); ok {
 		t.Error("garbage should not parse")
+	}
+}
+
+func TestDeletedContent(t *testing.T) {
+	text := deletedContent(&event.MessageEventContent{MsgType: event.MsgText, Body: "a < b\nc"})
+	if text.FormattedBody != "<del>a &lt; b<br/>c</del><br/><em>"+deletedLabel+"</em>" || text.Body != "~~a < b\nc~~\n"+deletedLabel {
+		t.Errorf("text: %q / %q", text.FormattedBody, text.Body)
+	}
+	orig := &event.MessageEventContent{MsgType: event.MsgImage, Body: "pic.png", URL: "mxc://x/y"}
+	img := deletedContent(orig)
+	if img.URL != "mxc://x/y" || img.FileName != "pic.png" || img.Body != "pic.png ("+deletedLabel+")" {
+		t.Errorf("image: %+v", img)
+	}
+	if orig.Body != "pic.png" {
+		t.Error("original content must not be modified")
 	}
 }

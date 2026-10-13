@@ -54,6 +54,9 @@ func (bc *BitrixClient) convertMessage(ctx context.Context, portal *bridgev2.Por
 		part := bc.convertFile(ctx, portal, intent, fileID, data.Files[fileID])
 		cm.Parts = append(cm.Parts, part)
 	}
+	for _, part := range cm.Parts {
+		part.DBMetadata = &MessageMetadata{Content: part.Content}
+	}
 	if len(cm.Parts) == 0 {
 		cm.Parts = append(cm.Parts, &bridgev2.ConvertedMessagePart{
 			ID:   textPartID,
@@ -148,6 +151,7 @@ func (bc *BitrixClient) convertEdit(ctx context.Context, portal *bridgev2.Portal
 		return nil, fmt.Errorf("%w: no text part to edit", bridgev2.ErrIgnoringRemoteEvent)
 	}
 	content := bbcodeToMatrix(strings.TrimSpace(data.Msg.Text), bc.mentionResolver)
+	target.Metadata = &MessageMetadata{Content: content}
 	return &bridgev2.ConvertedEdit{
 		ModifiedParts: []*bridgev2.ConvertedEditPart{{
 			Part:    target,
