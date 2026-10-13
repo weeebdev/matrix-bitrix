@@ -79,17 +79,17 @@ func (bc *BitrixClient) Connect(ctx context.Context) {
 		bc.sendPausedState()
 		return
 	}
-	bc.UserLogin.BridgeState.Send(status.BridgeState{StateEvent: status.StateConnecting})
+	bc.sendState(status.BridgeState{StateEvent: status.StateConnecting})
 	if err := bc.client.EnsureSession(ctx); err != nil {
 		log.Err(err).Msg("Failed to establish Bitrix session")
 		if errors.Is(err, bitrix.ErrInvalidLogin) || errors.Is(err, bitrix.ErrNotLoggedIn) {
-			bc.UserLogin.BridgeState.Send(status.BridgeState{
+			bc.sendState(status.BridgeState{
 				StateEvent: status.StateBadCredentials,
 				Error:      "bitrix-invalid-auth",
 				Message:    "Bitrix session expired and re-login failed, please log in again",
 			})
 		} else {
-			bc.UserLogin.BridgeState.Send(status.BridgeState{
+			bc.sendState(status.BridgeState{
 				StateEvent: status.StateTransientDisconnect,
 				Error:      "bitrix-connect-failed",
 				Message:    err.Error(),
@@ -115,7 +115,7 @@ func (bc *BitrixClient) Connect(ctx context.Context) {
 
 	pull := bc.client.NewPullClient(log.With().Str("component", "pull").Logger(), bc.handlePullEvent)
 	pull.OnConnect = func() {
-		bc.UserLogin.BridgeState.Send(status.BridgeState{StateEvent: status.StateConnected})
+		bc.sendState(status.BridgeState{StateEvent: status.StateConnected})
 		go bc.syncRecentChats(pullCtx)
 	}
 	pull.OnDisconnect = func(err error) {
@@ -123,14 +123,14 @@ func (bc *BitrixClient) Connect(ctx context.Context) {
 		if err != nil {
 			msg = err.Error()
 		}
-		bc.UserLogin.BridgeState.Send(status.BridgeState{
+		bc.sendState(status.BridgeState{
 			StateEvent: status.StateTransientDisconnect,
 			Error:      "bitrix-pull-disconnected",
 			Message:    msg,
 		})
 		// The push config fetch can fail because the session expired; refresh it before retrying.
 		if refreshErr := bc.client.EnsureSession(pullCtx); errors.Is(refreshErr, bitrix.ErrInvalidLogin) || errors.Is(refreshErr, bitrix.ErrNotLoggedIn) {
-			bc.UserLogin.BridgeState.Send(status.BridgeState{
+			bc.sendState(status.BridgeState{
 				StateEvent: status.StateBadCredentials,
 				Error:      "bitrix-invalid-auth",
 				Message:    "Bitrix session expired and re-login failed, please log in again",
@@ -162,8 +162,20 @@ func (bc *BitrixClient) IsLoggedIn() bool {
 	return bc.loggedIn && !bc.meta().Paused
 }
 
+// sendState sends a bridge state to Beeper and also logs it at INFO with stable field names. In
+// websocket mode bridge states only go to Beeper, so this log line is what external monitoring
+// (e.g. reading `kubectl logs`) can see. Keep it free of credentials and IDs.
+func (bc *BitrixClient) sendState(state status.BridgeState) {
+	// The bridge root logger, not the login's: that one adds login_id and user_mxid to every line.
+	bc.Main.br.Log.Info().
+		Str("bridge_state", string(state.StateEvent)).
+		Str("error_code", string(state.Error)).
+		Msg("Bridge state changed")
+	bc.UserLogin.BridgeState.Send(state)
+}
+
 func (bc *BitrixClient) sendPausedState() {
-	bc.UserLogin.BridgeState.Send(status.BridgeState{
+	bc.sendState(status.BridgeState{
 		StateEvent: status.StateTransientDisconnect,
 		Error:      "bitrix-paused",
 		Message:    "Bridge is paused. Send `resume` to the bridge bot to reconnect.",
