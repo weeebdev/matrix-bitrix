@@ -47,6 +47,7 @@ Bot commands (in the bridge bot chat, which Beeper may show under your own name)
 - `delete-empty-portals`: remove bridged rooms that have no messages
 - `invisible on|off`: stop sending read receipts and typing notifications to Bitrix (off by default)
 - `keep-deleted on|off`: keep messages deleted in Bitrix, struck through and marked 🗑 (on by default)
+- `show-edits on|off`: list previous versions under edited messages, newest first (on by default)
 - `pause` / `resume`: disconnect from Bitrix and stop bridging, e.g. while testing a dev bridge;
   survives restarts
 

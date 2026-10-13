@@ -58,7 +58,7 @@ func (bc *BitrixConnector) Init(bridge *bridgev2.Bridge) {
 
 func (bc *BitrixConnector) Start(ctx context.Context) error {
 	if proc, ok := bc.br.Commands.(*commands.Processor); ok {
-		proc.AddHandlers(cmdDeleteEmptyPortals, cmdInvisible, cmdKeepDeleted, cmdPause, cmdResume)
+		proc.AddHandlers(cmdDeleteEmptyPortals, cmdInvisible, cmdKeepDeleted, cmdShowEdits, cmdPause, cmdResume)
 	}
 	return nil
 }
@@ -105,6 +105,7 @@ type UserLoginMetadata struct {
 	Invisible   bool  `json:"invisible,omitempty"`
 	Paused      bool  `json:"paused,omitempty"`
 	KeepDeleted *bool `json:"keep_deleted,omitempty"`
+	ShowEdits   *bool `json:"show_edits,omitempty"`
 }
 
 // MessageMetadata keeps the bridged content of each message part, so a message deleted in
@@ -112,6 +113,8 @@ type UserLoginMetadata struct {
 type MessageMetadata struct {
 	Content *event.MessageEventContent `json:"content,omitempty"`
 	Deleted bool                       `json:"deleted,omitempty"`
+	// Previous plain-text versions, newest first (see show-edits).
+	EditHistory []string `json:"edit_history,omitempty"`
 }
 
 type PortalMetadata struct {

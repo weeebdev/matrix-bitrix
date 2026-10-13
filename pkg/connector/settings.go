@@ -2,13 +2,19 @@ package connector
 
 import (
 	"context"
+	"html"
 	"strings"
 	"time"
 
 	"maunium.net/go/mautrix/bridgev2/commands"
+	"maunium.net/go/mautrix/event"
 )
 
 // Per-login settings live in UserLoginMetadata and are toggled with bot commands.
+
+func (meta *UserLoginMetadata) ShowEditsEnabled() bool {
+	return meta.ShowEdits == nil || *meta.ShowEdits
+}
 
 func (meta *UserLoginMetadata) KeepDeletedEnabled() bool {
 	return meta.KeepDeleted == nil || *meta.KeepDeleted
@@ -141,4 +147,34 @@ func (bc *BitrixClient) wasDeletedFromMatrix(messageID int64) bool {
 	defer bc.deletesLock.Unlock()
 	at, ok := bc.matrixDeletes[messageID]
 	return ok && time.Since(at) <= matrixDeleteMemory
+}
+
+var cmdShowEdits = settingCommand("show-edits",
+	"Show previous versions under edited messages",
+	func(m *UserLoginMetadata) bool { return m.ShowEditsEnabled() },
+	func(m *UserLoginMetadata, v bool) { m.ShowEdits = &v },
+	"When on, edited messages list their earlier versions underneath (\"✏️ was: …\"), newest first. "+
+		"Beeper otherwise only shows the latest version.")
+
+const maxEditHistory = 10
+
+// withEditHistory returns a copy of content with previous versions appended, newest first.
+func withEditHistory(orig *event.MessageEventContent, history []string) *event.MessageEventContent {
+	c := *orig
+	formatted := c.FormattedBody
+	if c.Format != event.FormatHTML || formatted == "" {
+		formatted = strings.ReplaceAll(html.EscapeString(c.Body), "\n", "<br/>")
+	}
+	var plain, rich strings.Builder
+	plain.WriteString(c.Body)
+	rich.WriteString(formatted)
+	for _, old := range history {
+		plain.WriteString("\n✏️ was: " + old)
+		rich.WriteString(`<br/><font color="#888888"><sub>✏️ was: ` +
+			strings.ReplaceAll(html.EscapeString(old), "\n", "<br/>") + "</sub></font>")
+	}
+	c.Body = plain.String()
+	c.Format = event.FormatHTML
+	c.FormattedBody = rich.String()
+	return &c
 }

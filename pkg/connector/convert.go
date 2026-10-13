@@ -151,12 +151,26 @@ func (bc *BitrixClient) convertEdit(ctx context.Context, portal *bridgev2.Portal
 		return nil, fmt.Errorf("%w: no text part to edit", bridgev2.ErrIgnoringRemoteEvent)
 	}
 	content := bbcodeToMatrix(strings.TrimSpace(data.Msg.Text), bc.mentionResolver)
-	target.Metadata = &MessageMetadata{Content: content}
+	newMeta := &MessageMetadata{Content: content}
+	if old, ok := target.Metadata.(*MessageMetadata); ok {
+		newMeta.EditHistory = old.EditHistory
+		if old.Content != nil && old.Content.Body != content.Body {
+			newMeta.EditHistory = append([]string{old.Content.Body}, old.EditHistory...)
+			if len(newMeta.EditHistory) > maxEditHistory {
+				newMeta.EditHistory = newMeta.EditHistory[:maxEditHistory]
+			}
+		}
+	}
+	target.Metadata = newMeta
+	shown := content
+	if bc.meta().ShowEditsEnabled() && len(newMeta.EditHistory) > 0 {
+		shown = withEditHistory(content, newMeta.EditHistory)
+	}
 	return &bridgev2.ConvertedEdit{
 		ModifiedParts: []*bridgev2.ConvertedEditPart{{
 			Part:    target,
 			Type:    event.EventMessage,
-			Content: content,
+			Content: shown,
 		}},
 	}, nil
 }

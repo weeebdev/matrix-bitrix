@@ -40,3 +40,14 @@ func TestDeletedContent(t *testing.T) {
 		t.Error("original content must not be modified")
 	}
 }
+
+func TestWithEditHistory(t *testing.T) {
+	c := withEditHistory(&event.MessageEventContent{MsgType: event.MsgText, Body: "v3"}, []string{"v2", "a<b"})
+	if c.Body != "v3\n✏️ was: v2\n✏️ was: a<b" {
+		t.Errorf("body %q", c.Body)
+	}
+	want := `v3<br/><font color="#888888"><sub>✏️ was: v2</sub></font><br/><font color="#888888"><sub>✏️ was: a&lt;b</sub></font>`
+	if c.FormattedBody != want {
+		t.Errorf("html %q", c.FormattedBody)
+	}
+}
