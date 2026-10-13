@@ -1,0 +1,102 @@
+package connector
+
+import (
+	"strings"
+	"time"
+
+	"maunium.net/go/mautrix/bridgev2/commands"
+)
+
+// Per-login settings live in UserLoginMetadata and are toggled with bot commands.
+
+func (meta *UserLoginMetadata) KeepDeletedEnabled() bool {
+	return meta.KeepDeleted == nil || *meta.KeepDeleted
+}
+
+func boolArg(args []string) (value, ok bool) {
+	if len(args) == 0 {
+		return false, false
+	}
+	switch strings.ToLower(args[0]) {
+	case "on", "yes", "true", "1", "enable":
+		return true, true
+	case "off", "no", "false", "0", "disable":
+		return false, true
+	}
+	return false, false
+}
+
+func onOff(v bool) string {
+	if v {
+		return "on"
+	}
+	return "off"
+}
+
+func settingCommand(name, description string, get func(*UserLoginMetadata) bool, set func(*UserLoginMetadata, bool), explain string) *commands.FullHandler {
+	return &commands.FullHandler{
+		Func: func(ce *commands.Event) {
+			login := ce.User.GetDefaultLogin()
+			if login == nil {
+				ce.Reply("You're not logged in")
+				return
+			}
+			meta := login.Metadata.(*UserLoginMetadata)
+			value, ok := boolArg(ce.Args)
+			if !ok {
+				ce.Reply("%s is **%s**. Usage: `%s on|off`\n\n%s", name, onOff(get(meta)), name, explain)
+				return
+			}
+			set(meta, value)
+			if err := login.Save(ce.Ctx); err != nil {
+				ce.Reply("Failed to save setting: %v", err)
+				return
+			}
+			ce.Reply("%s is now **%s**", name, onOff(value))
+		},
+		Name: name,
+		Help: commands.HelpMeta{
+			Section:     commands.HelpSectionGeneral,
+			Description: description,
+			Args:        "[on|off]",
+		},
+		RequiresLogin: true,
+	}
+}
+
+var cmdInvisible = settingCommand("invisible",
+	"Don't send read receipts or typing notifications to Bitrix",
+	func(m *UserLoginMetadata) bool { return m.Invisible },
+	func(m *UserLoginMetadata, v bool) { m.Invisible = v },
+	"When on, reading or typing in Beeper isn't reported to colleagues, and chats stay unread in "+
+		"Bitrix itself. Bitrix may still show you as online while the bridge is connected.")
+
+var cmdKeepDeleted = settingCommand("keep-deleted",
+	"Keep messages in Beeper when they're deleted in Bitrix",
+	func(m *UserLoginMetadata) bool { return m.KeepDeletedEnabled() },
+	func(m *UserLoginMetadata, v bool) { m.KeepDeleted = &v },
+	"When on, messages deleted in Bitrix stay in Beeper with a 🗑 reply instead of being removed. "+
+		"Messages you delete from Beeper are always removed.")
+
+// matrixDeletes remembers messages deleted from Matrix, so their Bitrix delete echo isn't
+// mistaken for someone else's delete when keep-deleted is on.
+const matrixDeleteMemory = 10 * time.Minute
+
+func (bc *BitrixClient) rememberMatrixDelete(messageID int64) {
+	bc.deletesLock.Lock()
+	defer bc.deletesLock.Unlock()
+	now := time.Now()
+	for id, at := range bc.matrixDeletes {
+		if now.Sub(at) > matrixDeleteMemory {
+			delete(bc.matrixDeletes, id)
+		}
+	}
+	bc.matrixDeletes[messageID] = now
+}
+
+func (bc *BitrixClient) wasDeletedFromMatrix(messageID int64) bool {
+	bc.deletesLock.Lock()
+	defer bc.deletesLock.Unlock()
+	at, ok := bc.matrixDeletes[messageID]
+	return ok && time.Since(at) <= matrixDeleteMemory
+}

@@ -32,6 +32,9 @@ type BitrixClient struct {
 	// chatID -> dialogID cache for push events that only carry chatId
 	dialogLock sync.RWMutex
 	dialogs    map[int64]string
+
+	deletesLock   sync.Mutex
+	matrixDeletes map[int64]time.Time
 }
 
 var (
@@ -50,6 +53,8 @@ func newBitrixClient(main *BitrixConnector, login *bridgev2.UserLogin, client *b
 		UserLogin: login,
 		client:    client,
 		dialogs:   make(map[int64]string),
+
+		matrixDeletes: make(map[int64]time.Time),
 	}
 	client.OnSessionChange = bc.saveSession
 	return bc
@@ -142,6 +147,10 @@ func (bc *BitrixClient) LogoutRemote(ctx context.Context) {
 
 func (bc *BitrixClient) IsThisUser(ctx context.Context, userID networkid.UserID) bool {
 	return userID == makeUserID(bc.client.UserID)
+}
+
+func (bc *BitrixClient) meta() *UserLoginMetadata {
+	return bc.UserLogin.Metadata.(*UserLoginMetadata)
 }
 
 func (bc *BitrixClient) myUserID() networkid.UserID {

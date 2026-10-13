@@ -45,6 +45,8 @@ Bot commands (in the bridge bot chat, which Beeper may show under your own name)
 - `search <name>`: find colleagues (same people search as the web messenger)
 - `start-chat <user ID>`: open a DM; the Bitrix chat is created on the first message
 - `delete-empty-portals`: remove bridged rooms that have no messages
+- `invisible on|off`: stop sending read receipts and typing notifications to Bitrix (off by default)
+- `keep-deleted on|off`: keep messages deleted in Bitrix, marked with a 🗑 reply (on by default)
 
 The login password is stored in the bridge database so the bridge can re-login when the PHP
 session expires. Keep `config.yaml` and the `.db` file private.

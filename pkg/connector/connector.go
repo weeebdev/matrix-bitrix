@@ -57,7 +57,7 @@ func (bc *BitrixConnector) Init(bridge *bridgev2.Bridge) {
 
 func (bc *BitrixConnector) Start(ctx context.Context) error {
 	if proc, ok := bc.br.Commands.(*commands.Processor); ok {
-		proc.AddHandlers(cmdDeleteEmptyPortals)
+		proc.AddHandlers(cmdDeleteEmptyPortals, cmdInvisible, cmdKeepDeleted)
 	}
 	return nil
 }
@@ -97,6 +97,10 @@ type UserLoginMetadata struct {
 	Password  string            `json:"password,omitempty"`
 	UserID    int64             `json:"user_id"`
 	Cookies   map[string]string `json:"cookies"`
+
+	// Settings, toggled with bot commands
+	Invisible   bool  `json:"invisible,omitempty"`
+	KeepDeleted *bool `json:"keep_deleted,omitempty"`
 }
 
 type PortalMetadata struct {

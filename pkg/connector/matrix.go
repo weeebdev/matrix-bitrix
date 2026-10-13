@@ -94,7 +94,9 @@ func (bc *BitrixClient) HandleMatrixEdit(ctx context.Context, msg *bridgev2.Matr
 }
 
 func (bc *BitrixClient) HandleMatrixMessageRemove(ctx context.Context, msg *bridgev2.MatrixMessageRemove) error {
-	return bc.client.DeleteMessage(ctx, parseMessageID(msg.TargetMessage.ID))
+	messageID := parseMessageID(msg.TargetMessage.ID)
+	bc.rememberMatrixDelete(messageID)
+	return bc.client.DeleteMessage(ctx, messageID)
 }
 
 func (bc *BitrixClient) PreHandleMatrixReaction(ctx context.Context, msg *bridgev2.MatrixReaction) (bridgev2.MatrixReactionPreResponse, error) {
@@ -119,6 +121,9 @@ func (bc *BitrixClient) HandleMatrixReactionRemove(ctx context.Context, msg *bri
 }
 
 func (bc *BitrixClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridgev2.MatrixReadReceipt) error {
+	if bc.meta().Invisible {
+		return nil
+	}
 	target := msg.ExactMessage
 	if target == nil {
 		var err error
@@ -131,7 +136,7 @@ func (bc *BitrixClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridge
 }
 
 func (bc *BitrixClient) HandleMatrixTyping(ctx context.Context, msg *bridgev2.MatrixTyping) error {
-	if !msg.IsTyping || msg.Type != bridgev2.TypingTypeText {
+	if !msg.IsTyping || msg.Type != bridgev2.TypingTypeText || bc.meta().Invisible {
 		return nil
 	}
 	return bc.client.Writing(ctx, string(msg.Portal.ID))

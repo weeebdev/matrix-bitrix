@@ -3,6 +3,7 @@ package connector
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/networkid"
 	"maunium.net/go/mautrix/bridgev2/simplevent"
+	"maunium.net/go/mautrix/event"
 
 	"github.com/weeebdev/mautrix-bitrix/pkg/bitrix"
 )
@@ -253,6 +255,10 @@ func (bc *BitrixClient) handleMessageDelete(ctx context.Context, raw json.RawMes
 	if !ok {
 		return nil
 	}
+	messageID := int64(p.ID)
+	if bc.meta().KeepDeletedEnabled() && !bc.wasDeletedFromMatrix(messageID) {
+		return bc.markDeleted(ctx, key, messageID, int64(p.SenderID))
+	}
 	bc.UserLogin.Bridge.QueueRemoteEvent(bc.UserLogin, &simplevent.MessageRemove{
 		EventMeta: simplevent.EventMeta{
 			Type:      bridgev2.RemoteEventMessageRemove,
@@ -260,7 +266,43 @@ func (bc *BitrixClient) handleMessageDelete(ctx context.Context, raw json.RawMes
 			Sender:    bc.sender(int64(p.SenderID)),
 			Timestamp: time.Now(),
 		},
-		TargetMessage: makeMessageID(int64(p.ID)),
+		TargetMessage: makeMessageID(messageID),
+	})
+	return nil
+}
+
+// markDeleted keeps a message deleted in Bitrix and replies to it with a notice instead.
+func (bc *BitrixClient) markDeleted(ctx context.Context, key networkid.PortalKey, messageID, senderID int64) error {
+	noticeID := networkid.MessageID(fmt.Sprintf("deleted-%d", messageID))
+	if existing, err := bc.UserLogin.Bridge.DB.Message.GetFirstPartByID(ctx, bc.UserLogin.ID, noticeID); err == nil && existing != nil {
+		return nil // messageDelete and messageDeleteComplete both arrive for one delete
+	}
+	who := "the sender"
+	if senderID == bc.client.UserID {
+		who = "you"
+	} else if ghost, err := bc.UserLogin.Bridge.GetExistingGhostByID(ctx, makeUserID(senderID)); err == nil && ghost != nil && ghost.Name != "" {
+		who = ghost.Name
+	}
+	bc.UserLogin.Bridge.QueueRemoteEvent(bc.UserLogin, &simplevent.Message[string]{
+		EventMeta: simplevent.EventMeta{
+			Type:      bridgev2.RemoteEventMessage,
+			PortalKey: key,
+			Timestamp: time.Now(),
+		},
+		Data: who,
+		ID:   noticeID,
+		ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, who string) (*bridgev2.ConvertedMessage, error) {
+			return &bridgev2.ConvertedMessage{
+				ReplyTo: &networkid.MessageOptionalPartID{MessageID: makeMessageID(messageID)},
+				Parts: []*bridgev2.ConvertedMessagePart{{
+					Type: event.EventMessage,
+					Content: &event.MessageEventContent{
+						MsgType: event.MsgNotice,
+						Body:    fmt.Sprintf("🗑 Deleted in Bitrix by %s", who),
+					},
+				}},
+			}, nil
+		},
 	})
 	return nil
 }
