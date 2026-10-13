@@ -1,0 +1,8 @@
+/mautrix-bitrix
+/bitrix-probe
+*.db
+*.db-*
+config.yaml
+registration.yaml
+logs/
+*.har
