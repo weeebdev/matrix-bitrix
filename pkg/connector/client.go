@@ -74,6 +74,11 @@ func (bc *BitrixClient) saveSession() {
 
 func (bc *BitrixClient) Connect(ctx context.Context) {
 	log := bc.UserLogin.Log
+	if bc.meta().Paused {
+		log.Info().Msg("Login is paused, not connecting to Bitrix")
+		bc.sendPausedState()
+		return
+	}
 	bc.UserLogin.BridgeState.Send(status.BridgeState{StateEvent: status.StateConnecting})
 	if err := bc.client.EnsureSession(ctx); err != nil {
 		log.Err(err).Msg("Failed to establish Bitrix session")
@@ -131,15 +136,31 @@ func (bc *BitrixClient) Connect(ctx context.Context) {
 
 func (bc *BitrixClient) Disconnect() {
 	bc.stateLock.Lock()
-	defer bc.stateLock.Unlock()
 	if bc.stopPull != nil {
 		bc.stopPull()
 		bc.stopPull = nil
 	}
+	bc.stateLock.Unlock()
+	bc.typingLock.Lock()
+	for dialogID, stop := range bc.typingStops {
+		stop()
+		delete(bc.typingStops, dialogID)
+	}
+	bc.typingLock.Unlock()
 }
 
+// IsLoggedIn is false while paused, which makes bridgev2 reject Matrix events instead of
+// passing them to the network API.
 func (bc *BitrixClient) IsLoggedIn() bool {
-	return bc.loggedIn
+	return bc.loggedIn && !bc.meta().Paused
+}
+
+func (bc *BitrixClient) sendPausedState() {
+	bc.UserLogin.BridgeState.Send(status.BridgeState{
+		StateEvent: status.StateTransientDisconnect,
+		Error:      "bitrix-paused",
+		Message:    "Bridge is paused. Send `resume` to the bridge bot to reconnect.",
+	})
 }
 
 func (bc *BitrixClient) LogoutRemote(ctx context.Context) {

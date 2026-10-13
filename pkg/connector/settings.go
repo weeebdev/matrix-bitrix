@@ -1,6 +1,7 @@
 package connector
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -75,8 +76,49 @@ var cmdKeepDeleted = settingCommand("keep-deleted",
 	"Keep messages in Beeper when they're deleted in Bitrix",
 	func(m *UserLoginMetadata) bool { return m.KeepDeletedEnabled() },
 	func(m *UserLoginMetadata, v bool) { m.KeepDeleted = &v },
-	"When on, messages deleted in Bitrix stay in Beeper with a 🗑 reply instead of being removed. "+
+	"When on, messages deleted in Bitrix stay in Beeper, struck through and marked 🗑, with attachments kept. "+
 		"Messages you delete from Beeper are always removed.")
+
+func pauseCommand(name, description string, pause bool) *commands.FullHandler {
+	return &commands.FullHandler{
+		Func: func(ce *commands.Event) {
+			login := ce.User.GetDefaultLogin()
+			if login == nil {
+				ce.Reply("You're not logged in")
+				return
+			}
+			meta := login.Metadata.(*UserLoginMetadata)
+			if meta.Paused == pause {
+				ce.Reply("Bridge is already %s", map[bool]string{true: "paused", false: "running"}[pause])
+				return
+			}
+			meta.Paused = pause
+			if err := login.Save(ce.Ctx); err != nil {
+				ce.Reply("Failed to save: %v", err)
+				return
+			}
+			client := login.Client.(*BitrixClient)
+			if pause {
+				client.Disconnect()
+				client.sendPausedState()
+				ce.Reply("Paused: disconnected from Bitrix. Nothing is sent or received until you send `resume`, " +
+					"including after restarts.")
+			} else {
+				go client.Connect(login.Log.WithContext(context.Background()))
+				ce.Reply("Resuming: reconnecting to Bitrix. Messages sent while paused are fetched by the next sync.")
+			}
+		},
+		Name: name,
+		Help: commands.HelpMeta{
+			Section:     commands.HelpSectionGeneral,
+			Description: description,
+		},
+		RequiresLogin: true,
+	}
+}
+
+var cmdPause = pauseCommand("pause", "Disconnect from Bitrix and stop bridging until `resume` (survives restarts)", true)
+var cmdResume = pauseCommand("resume", "Reconnect to Bitrix after `pause`", false)
 
 // matrixDeletes remembers messages deleted from Matrix, so their Bitrix delete echo isn't
 // mistaken for someone else's delete when keep-deleted is on.

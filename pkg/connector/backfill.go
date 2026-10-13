@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strconv"
 
@@ -17,6 +18,9 @@ type backfillHint struct {
 }
 
 func (bc *BitrixClient) FetchMessages(ctx context.Context, params bridgev2.FetchMessagesParams) (*bridgev2.FetchMessagesResponse, error) {
+	if bc.meta().Paused {
+		return nil, fmt.Errorf("bridge is paused")
+	}
 	chatID, err := bc.chatIDFor(ctx, params.Portal)
 	if err != nil {
 		return nil, err
