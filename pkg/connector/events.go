@@ -315,7 +315,7 @@ func (bc *BitrixClient) markDeleted(ctx context.Context, key networkid.PortalKey
 				edit.ModifiedParts = append(edit.ModifiedParts, &bridgev2.ConvertedEditPart{
 					Part:    part,
 					Type:    event.EventMessage,
-					Content: deletedContent(stored.Content),
+					Content: bc.deletedWithHistory(stored),
 				})
 				meta.Deleted = true
 			}
@@ -331,6 +331,15 @@ func (bc *BitrixClient) markDeleted(ctx context.Context, key networkid.PortalKey
 const deletedLabel = "🗑 deleted in Bitrix"
 
 // deletedContent returns a copy of content marked as deleted.
+// deletedWithHistory marks stored content as deleted, keeping its edit history visible (show-edits).
+func (bc *BitrixClient) deletedWithHistory(stored *storedContent) *event.MessageEventContent {
+	content := deletedContent(stored.Content)
+	if bc.meta().ShowEditsEnabled() && len(stored.EditHistory) > 0 {
+		content = withEditHistory(content, stored.EditHistory)
+	}
+	return content
+}
+
 func deletedContent(orig *event.MessageEventContent) *event.MessageEventContent {
 	c := *orig
 	c.Mentions = &event.Mentions{}

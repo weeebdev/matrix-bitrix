@@ -3,6 +3,8 @@ package connector
 import (
 	"testing"
 
+	"maunium.net/go/mautrix/bridgev2"
+	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/event"
 )
 
@@ -49,5 +51,16 @@ func TestWithEditHistory(t *testing.T) {
 	want := `v3<br/><font color="#888888"><sub>✏️ was: v2</sub></font><br/><font color="#888888"><sub>✏️ was: a&lt;b</sub></font>`
 	if c.FormattedBody != want {
 		t.Errorf("html %q", c.FormattedBody)
+	}
+}
+
+func TestDeletedKeepsEditHistory(t *testing.T) {
+	bc := &BitrixClient{UserLogin: &bridgev2.UserLogin{UserLogin: &database.UserLogin{Metadata: &UserLoginMetadata{}}}}
+	c := bc.deletedWithHistory(&storedContent{
+		Content:     &event.MessageEventContent{MsgType: event.MsgText, Body: "v2"},
+		EditHistory: []string{"v1"},
+	})
+	if c.Body != "~~v2~~\n"+deletedLabel+"\n✏️ was: v1" {
+		t.Errorf("body %q", c.Body)
 	}
 }
