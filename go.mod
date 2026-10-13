@@ -1,4 +1,4 @@
-module github.com/weeebdev/mautrix-bitrix
+module github.com/weeebdev/matrix-bitrix
 
 go 1.26.7
 

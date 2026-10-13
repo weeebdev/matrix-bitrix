@@ -1,4 +1,4 @@
-# mautrix-bitrix
+# matrix-bitrix
 
 A Matrix ↔ Bitrix24 puppeting bridge built on [mautrix-go bridgev2](https://github.com/mautrix/go),
 for running as a self-hosted bridge on Beeper. Targets self-hosted ("box") Bitrix24 portals and
@@ -34,7 +34,7 @@ nix shell nixpkgs#go nixpkgs#beeper-bridge-manager
 ./build.sh
 bbctl login                                   # your Beeper account
 bbctl config --type bridgev2 sh-bitrix -o config.yaml
-./mautrix-bitrix -c config.yaml               # first run fills in the `network:` section
+./matrix-bitrix -c config.yaml               # first run fills in the `network:` section
 ```
 
 Optionally set `network.default_portal_url` in `config.yaml`. Then in Beeper, open a chat with

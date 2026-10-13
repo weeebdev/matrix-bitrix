@@ -9,7 +9,7 @@ import (
 	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/bridgev2/status"
 
-	"github.com/weeebdev/mautrix-bitrix/pkg/bitrix"
+	"github.com/weeebdev/matrix-bitrix/pkg/bitrix"
 )
 
 const LoginFlowPassword = "password"

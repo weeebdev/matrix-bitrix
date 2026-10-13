@@ -14,7 +14,7 @@ import (
 	"maunium.net/go/mautrix/bridgev2/networkid"
 	"maunium.net/go/mautrix/event"
 
-	"github.com/weeebdev/mautrix-bitrix/pkg/bitrix"
+	"github.com/weeebdev/matrix-bitrix/pkg/bitrix"
 )
 
 type BitrixConnector struct {
@@ -72,7 +72,7 @@ func (bc *BitrixConnector) GetName() bridgev2.BridgeName {
 		NetworkURL:           "https://www.bitrix24.com",
 		NetworkIcon:          networkIcon,
 		NetworkID:            "bitrix",
-		BeeperBridgeType:     "github.com/weeebdev/mautrix-bitrix",
+		BeeperBridgeType:     "github.com/weeebdev/matrix-bitrix",
 		DefaultPort:          29340,
 		DefaultCommandPrefix: "!bitrix",
 	}

@@ -16,9 +16,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata
-COPY --from=build /src/mautrix-bitrix /usr/bin/mautrix-bitrix
+COPY --from=build /src/matrix-bitrix /usr/bin/matrix-bitrix
 # State (sqlite db) lives here; mount a volume.
 WORKDIR /data
-ENTRYPOINT ["/usr/bin/mautrix-bitrix"]
+ENTRYPOINT ["/usr/bin/matrix-bitrix"]
 # Config is mounted read-only, so never let the bridge rewrite it.
 CMD ["-c", "/config/config.yaml", "--no-update"]

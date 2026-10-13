@@ -9,7 +9,7 @@ import (
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/networkid"
 
-	"github.com/weeebdev/mautrix-bitrix/pkg/bitrix"
+	"github.com/weeebdev/matrix-bitrix/pkg/bitrix"
 )
 
 // backfillHint is passed from the recent-chat sync to the initial backfill.

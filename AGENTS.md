@@ -30,7 +30,7 @@ belong to colleagues. Treat it with care.
 ## Environments
 
 - **prod**: Beeper registration `sh-bitrix`, deployed to the k3s cluster from the `nix` repo
-  (`kubernetes/apps/mautrix-bitrix`). It's logged in to the corporate account. Don't re-register it
+  (`kubernetes/apps/`). It's logged in to the corporate account. Don't re-register it
   or run it anywhere else: two copies on one registration fight over the Beeper websocket.
 - **dev**: registration `sh-bitrix-dev`, run locally with `./dev.sh start|stop|restart|status|logs`.
   Its config and DB live in `dev/` (gitignored). Keep it **logged out** of the corporate Bitrix

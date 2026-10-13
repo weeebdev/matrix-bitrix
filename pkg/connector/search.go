@@ -8,7 +8,7 @@ import (
 
 	"maunium.net/go/mautrix/bridgev2"
 
-	"github.com/weeebdev/mautrix-bitrix/pkg/bitrix"
+	"github.com/weeebdev/matrix-bitrix/pkg/bitrix"
 )
 
 var _ bridgev2.UserSearchingNetworkAPI = (*BitrixClient)(nil)

@@ -5,6 +5,6 @@ registration.yaml
 *.db-*
 logs/
 *.har
-/mautrix-bitrix
+/matrix-bitrix
 /bitrix-probe
 .git

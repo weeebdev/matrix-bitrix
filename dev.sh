@@ -17,10 +17,10 @@ build)
 start)
 	if running; then echo "already running (pid $(cat "$PIDFILE"))"; exit 0; fi
 	[ -f "$CONFIG" ] || { echo "missing $CONFIG; generate with: (cd $DIR && bbctl config --type bridgev2 -o config.yaml sh-bitrix-dev)"; exit 1; }
-	[ -x ./mautrix-bitrix ] || "$0" build
+	[ -x ./matrix-bitrix ] || "$0" build
 	mkdir -p "$DIR/logs"
 	cd "$DIR"
-	nohup ../mautrix-bitrix -c config.yaml >>logs/stdout.log 2>&1 &
+	nohup ../matrix-bitrix -c config.yaml >>logs/stdout.log 2>&1 &
 	echo $! >bridge.pid
 	cd ..
 	echo "started (pid $(cat "$PIDFILE")), logs: $LOG"
