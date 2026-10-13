@@ -66,6 +66,7 @@ func (bc *BitrixConnector) Start(ctx context.Context) error {
 	if err = bc.wipePlaintextContent(ctx); err != nil {
 		return fmt.Errorf("failed to wipe plaintext message content: %w", err)
 	}
+	bc.vacuumSQLite(ctx)
 	if proc, ok := bc.br.Commands.(*commands.Processor); ok {
 		proc.AddHandlers(cmdDeleteEmptyPortals, cmdInvisible, cmdKeepDeleted, cmdShowEdits, cmdPause, cmdResume)
 	}

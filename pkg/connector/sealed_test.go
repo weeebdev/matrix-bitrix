@@ -3,8 +3,11 @@ package connector
 import (
 	"context"
 	"encoding/base64"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/rs/zerolog"
 
 	_ "github.com/mattn/go-sqlite3"
 	"go.mau.fi/util/dbutil"
@@ -79,5 +82,50 @@ func TestWipePlaintextContent(t *testing.T) {
 		if got != want {
 			t.Errorf("row %s: got %s, want %s", id, got, want)
 		}
+	}
+}
+
+func TestWipeLeavesNoRemnantsOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/test.db"
+	db, err := dbutil.NewWithDialect("file:"+path+"?_journal_mode=WAL&_txlock=immediate", "sqlite3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	const marker = "PLAINTEXT-MARKER-7f3a"
+	_, err = db.Exec(ctx, `CREATE TABLE message (bridge_id TEXT, id TEXT, metadata jsonb NOT NULL)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 200; i++ {
+		_, err = db.Exec(ctx, `INSERT INTO message VALUES ('b', $1, $2)`, i, `{"content":{"body":"`+marker+strings.Repeat("x", 200)+`"}}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err = db.Exec(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		t.Fatal(err)
+	}
+	bc := &BitrixConnector{br: &bridgev2.Bridge{ID: "b"}}
+	bc.br.DB = &database.Database{Database: db}
+	bc.br.Log = zerolog.Nop()
+	if err = bc.wipePlaintextContent(ctx); err != nil {
+		t.Fatal(err)
+	}
+	scan := func() int {
+		n := 0
+		for _, suffix := range []string{"", "-wal", "-shm"} {
+			data, _ := os.ReadFile(path + suffix)
+			n += strings.Count(string(data), marker)
+		}
+		return n
+	}
+	if scan() == 0 {
+		t.Fatal("expected remnants in free pages before vacuum (test is not exercising the problem)")
+	}
+	bc.vacuumSQLite(ctx)
+	if n := scan(); n != 0 {
+		t.Fatalf("found %d plaintext remnants on disk after vacuum", n)
 	}
 }

@@ -57,7 +57,9 @@ environment variable (`openssl rand -base64 32`), which never touches the databa
 and backups only hold ciphertext. Your own messages aren't stored. Without the key nothing is
 stored: deletes get a reply notice and edits show only the latest version. Don't rotate the key:
 stored copies become unreadable. Versions before 0.1.7 stored this content in plaintext; 0.1.7
-wipes it on first start (earlier database snapshots and backups still contain it).
+wipes it on first start and, from 0.1.8, `VACUUM`s the SQLite database on every start so removed
+content doesn't linger in free pages (earlier snapshots and backups still contain it). Add
+`_secure_delete=on` to the SQLite database URI so content removed between restarts is overwritten too.
 
 The login password is stored in the bridge database so the bridge can re-login when the PHP
 session expires. Keep `config.yaml` and the `.db` file private.

@@ -136,3 +136,41 @@ func (bc *BitrixConnector) wipePlaintextContent(ctx context.Context) error {
 	}
 	return nil
 }
+
+// vacuumSQLite rebuilds a SQLite database so content removed by the wipe (or by later edits and
+// deletes) doesn't linger in free pages, then truncates the WAL. It runs on every start; the
+// bridge database is small. Failures are logged and don't stop the bridge. For deletes between
+// restarts, set _secure_delete=on in the database URI.
+func (bc *BitrixConnector) vacuumSQLite(ctx context.Context) {
+	if bc.br.DB.Dialect != dbutil.SQLite {
+		return
+	}
+	log := bc.br.Log.With().Str("action", "vacuum database").Logger()
+	before, err := bc.sqliteSize(ctx)
+	if err == nil {
+		_, err = bc.br.DB.Exec(ctx, "PRAGMA secure_delete=ON")
+	}
+	if err == nil {
+		_, err = bc.br.DB.Exec(ctx, "VACUUM")
+	}
+	if err == nil {
+		_, err = bc.br.DB.Exec(ctx, "PRAGMA wal_checkpoint(TRUNCATE)")
+	}
+	if err != nil {
+		log.Err(err).Msg("Failed to vacuum database")
+		return
+	}
+	after, _ := bc.sqliteSize(ctx)
+	log.Info().Int64("size_before", before).Int64("size_after", after).Msg("Vacuumed database")
+}
+
+func (bc *BitrixConnector) sqliteSize(ctx context.Context) (int64, error) {
+	var pages, pageSize int64
+	if err := bc.br.DB.QueryRow(ctx, "PRAGMA page_count").Scan(&pages); err != nil {
+		return 0, err
+	}
+	if err := bc.br.DB.QueryRow(ctx, "PRAGMA page_size").Scan(&pageSize); err != nil {
+		return 0, err
+	}
+	return pages * pageSize, nil
+}
