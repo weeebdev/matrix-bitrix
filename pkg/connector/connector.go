@@ -9,6 +9,7 @@ import (
 
 	"go.mau.fi/util/configupgrade"
 	"maunium.net/go/mautrix/bridgev2"
+	"maunium.net/go/mautrix/bridgev2/commands"
 	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/bridgev2/networkid"
 
@@ -55,6 +56,9 @@ func (bc *BitrixConnector) Init(bridge *bridgev2.Bridge) {
 }
 
 func (bc *BitrixConnector) Start(ctx context.Context) error {
+	if proc, ok := bc.br.Commands.(*commands.Processor); ok {
+		proc.AddHandlers(cmdDeleteEmptyPortals)
+	}
 	return nil
 }
 
@@ -76,7 +80,15 @@ func (bc *BitrixConnector) GetBridgeInfoVersion() (info, capabilities int) {
 }
 
 func (bc *BitrixConnector) GetCapabilities() *bridgev2.NetworkGeneralCapabilities {
-	return &bridgev2.NetworkGeneralCapabilities{}
+	return &bridgev2.NetworkGeneralCapabilities{
+		Provisioning: bridgev2.ProvisioningCapabilities{
+			ResolveIdentifier: bridgev2.ResolveIdentifierCapabilities{
+				CreateDM:       true,
+				LookupUsername: true,
+				Search:         true,
+			},
+		},
+	}
 }
 
 type UserLoginMetadata struct {

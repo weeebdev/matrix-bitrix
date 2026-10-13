@@ -136,6 +136,47 @@ func (c *Client) DeleteReaction(ctx context.Context, messageID int64, reaction s
 	}, nil)
 }
 
+// SearchUsers runs the messenger's "new chat" people search (same entity selector as the web UI).
+func (c *Client) SearchUsers(ctx context.Context, query string) ([]*User, error) {
+	var out struct {
+		Dialog struct {
+			Items []struct {
+				ID         FlexString `json:"id"`
+				EntityType string     `json:"entityType"`
+				CustomData *User      `json:"customData"`
+			} `json:"items"`
+		} `json:"dialog"`
+	}
+	err := c.ActionJSON(ctx, "ui.entityselector.doSearch", map[string]any{
+		"dialog": map[string]any{
+			"entities": []any{map[string]any{
+				"id":            "im-recent-v2",
+				"dynamicLoad":   true,
+				"dynamicSearch": true,
+				"options":       map[string]any{"withChatByUsers": false, "exclude": []any{}},
+			}},
+			"preselectedItems":      []any{},
+			"clearUnavailableItems": false,
+			"context":               "IM_CHAT_SEARCH",
+			"id":                    "im-chat-search",
+		},
+		"searchQuery": map[string]any{
+			"queryWords": strings.Fields(query),
+			"query":      query,
+		},
+	}, &out)
+	if err != nil {
+		return nil, err
+	}
+	users := make([]*User, 0, len(out.Dialog.Items))
+	for _, item := range out.Dialog.Items {
+		if item.EntityType == "im-user" && item.CustomData != nil && item.CustomData.ID != 0 {
+			users = append(users, item.CustomData)
+		}
+	}
+	return users, nil
+}
+
 func (c *Client) GetUser(ctx context.Context, userID int64) (*User, error) {
 	var out User
 	return &out, c.REST(ctx, "im.user.get", map[string]any{"ID": userID}, &out)

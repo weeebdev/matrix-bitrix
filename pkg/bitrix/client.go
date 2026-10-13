@@ -255,8 +255,20 @@ func (c *Client) withRetry(ctx context.Context, fn func() error) error {
 	return err
 }
 
+// ActionJSON calls an ajax.php controller action with a JSON body (used by ui.entityselector).
+func (c *Client) ActionJSON(ctx context.Context, action string, body any, out any) error {
+	data, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	return c.withRetry(ctx, func() error { return c.doAction(ctx, action, string(data), "application/json", out) })
+}
+
 func (c *Client) action(ctx context.Context, action string, params map[string]any, out any) error {
-	body := EncodeForm(params).Encode()
+	return c.doAction(ctx, action, EncodeForm(params).Encode(), "application/x-www-form-urlencoded", out)
+}
+
+func (c *Client) doAction(ctx context.Context, action, body, contentType string, out any) error {
 	req, err := c.newRequest(ctx, http.MethodPost, "/bitrix/services/main/ajax.php?action="+url.QueryEscape(action), strings.NewReader(body))
 	if err != nil {
 		return err
@@ -266,7 +278,7 @@ func (c *Client) action(ctx context.Context, action string, params map[string]an
 	req.Header.Set("X-Bitrix-Site-Id", c.SiteID)
 	c.lock.RUnlock()
 	req.Header.Set("Bx-Ajax", "true")
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", contentType)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return fmt.Errorf("%s: %w", action, err)

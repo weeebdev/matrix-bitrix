@@ -255,6 +255,11 @@ func (bc *BitrixClient) syncRecentChats(ctx context.Context) {
 
 func (bc *BitrixClient) GetChatInfo(ctx context.Context, portal *bridgev2.Portal) (*bridgev2.ChatInfo, error) {
 	dialogID := string(portal.ID)
+	if !bitrix.IsChatDialog(dialogID) {
+		// DMs don't need a server round-trip, and may not exist on Bitrix yet when started from
+		// Matrix: the chat is created when the first message is sent.
+		return bc.dmChatInfo(dialogID), nil
+	}
 	batch, err := bc.client.LoadChat(ctx, dialogID, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load chat: %w", err)
@@ -276,25 +281,6 @@ func (bc *BitrixClient) GetChatInfo(ctx context.Context, portal *bridgev2.Portal
 			}
 			return changed
 		},
-	}
-	if !bitrix.IsChatDialog(dialogID) {
-		otherID := makeUserID(parseUserID(networkid.UserID(dialogID)))
-		info.Type = ptr.Ptr(database.RoomTypeDM)
-		members := []bridgev2.ChatMember{
-			{EventSender: bc.sender(bc.client.UserID), Membership: event.MembershipJoin},
-		}
-		if otherID != bc.myUserID() {
-			members = append(members, bridgev2.ChatMember{
-				EventSender: bridgev2.EventSender{Sender: otherID},
-				Membership:  event.MembershipJoin,
-			})
-		}
-		info.Members = &bridgev2.ChatMemberList{
-			IsFull:      true,
-			OtherUserID: otherID,
-			Members:     members,
-		}
-		return info, nil
 	}
 	info.Type = ptr.Ptr(database.RoomTypeDefault)
 	info.Name = ptr.Ptr(chat.Name)
@@ -339,6 +325,28 @@ func (bc *BitrixClient) GetChatInfo(ctx context.Context, portal *bridgev2.Portal
 	}
 	info.Members = memberList
 	return info, nil
+}
+
+func (bc *BitrixClient) dmChatInfo(dialogID string) *bridgev2.ChatInfo {
+	otherID := makeUserID(parseUserID(networkid.UserID(dialogID)))
+	members := []bridgev2.ChatMember{
+		{EventSender: bc.sender(bc.client.UserID), Membership: event.MembershipJoin},
+	}
+	if otherID != bc.myUserID() {
+		members = append(members, bridgev2.ChatMember{
+			EventSender: bridgev2.EventSender{Sender: otherID},
+			Membership:  event.MembershipJoin,
+		})
+	}
+	return &bridgev2.ChatInfo{
+		CanBackfill: true,
+		Type:        ptr.Ptr(database.RoomTypeDM),
+		Members: &bridgev2.ChatMemberList{
+			IsFull:      true,
+			OtherUserID: otherID,
+			Members:     members,
+		},
+	}
 }
 
 func (bc *BitrixClient) makeAvatar(avatarURL string) *bridgev2.Avatar {
