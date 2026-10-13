@@ -91,6 +91,8 @@ func (pl *PasswordLogin) SubmitUserInput(ctx context.Context, input map[string]s
 		RemoteName: name,
 		RemoteProfile: status.RemoteProfile{
 			Username: input["login"],
+			Name:     name,
+			Avatar:   networkIcon,
 		},
 		Metadata: &UserLoginMetadata{
 			PortalURL: client.BaseURL.String(),

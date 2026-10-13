@@ -97,6 +97,13 @@ func (bc *BitrixClient) Connect(ctx context.Context) {
 		}
 		return
 	}
+	// Logins made before the account avatar existed get it on connect.
+	if bc.UserLogin.RemoteProfile.Avatar == "" {
+		bc.UserLogin.RemoteProfile.Avatar = networkIcon
+		if err := bc.UserLogin.Save(ctx); err != nil {
+			log.Err(err).Msg("Failed to save remote profile")
+		}
+	}
 	bc.stateLock.Lock()
 	bc.loggedIn = true
 	if bc.stopPull != nil {

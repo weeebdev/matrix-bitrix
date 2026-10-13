@@ -63,12 +63,14 @@ func (bc *BitrixConnector) Start(ctx context.Context) error {
 	return nil
 }
 
+// assets/bitrix24.png, uploaded to the Beeper media repo. Also used as the account avatar.
+const networkIcon = "mxc://local.beeper.com/weeebdev_492sCiEpxNtUNhsVI08GUdH1gdk3vUFUkTJBO7mF10Fq1Em6lmY2AFcK5fGaxhmm"
+
 func (bc *BitrixConnector) GetName() bridgev2.BridgeName {
 	return bridgev2.BridgeName{
-		DisplayName: "Bitrix24",
-		NetworkURL:  "https://www.bitrix24.com",
-		// assets/bitrix24.png, uploaded to the Beeper media repo
-		NetworkIcon:          "mxc://local.beeper.com/weeebdev_492sCiEpxNtUNhsVI08GUdH1gdk3vUFUkTJBO7mF10Fq1Em6lmY2AFcK5fGaxhmm",
+		DisplayName:          "Bitrix24",
+		NetworkURL:           "https://www.bitrix24.com",
+		NetworkIcon:          networkIcon,
 		NetworkID:            "bitrix",
 		BeeperBridgeType:     "github.com/weeebdev/mautrix-bitrix",
 		DefaultPort:          29340,
