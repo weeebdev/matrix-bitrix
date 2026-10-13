@@ -14,7 +14,7 @@ import (
 	"maunium.net/go/mautrix/bridgev2/networkid"
 	"maunium.net/go/mautrix/event"
 
-	"github.com/adil/mautrix-bitrix/pkg/bitrix"
+	"github.com/weeebdev/mautrix-bitrix/pkg/bitrix"
 )
 
 const textPartID = networkid.PartID("")

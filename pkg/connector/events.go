@@ -12,7 +12,7 @@ import (
 	"maunium.net/go/mautrix/bridgev2/networkid"
 	"maunium.net/go/mautrix/bridgev2/simplevent"
 
-	"github.com/adil/mautrix-bitrix/pkg/bitrix"
+	"github.com/weeebdev/mautrix-bitrix/pkg/bitrix"
 )
 
 type pullMessageParams struct {

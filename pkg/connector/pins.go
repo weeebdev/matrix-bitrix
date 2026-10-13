@@ -12,7 +12,7 @@ import (
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 
-	"github.com/adil/mautrix-bitrix/pkg/bitrix"
+	"github.com/weeebdev/mautrix-bitrix/pkg/bitrix"
 )
 
 // Pins are bridged one way (Bitrix -> Matrix): bridgev2 doesn't route m.room.pinned_events

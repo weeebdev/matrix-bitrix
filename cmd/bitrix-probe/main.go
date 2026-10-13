@@ -15,7 +15,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/adil/mautrix-bitrix/pkg/bitrix"
+	"github.com/weeebdev/mautrix-bitrix/pkg/bitrix"
 )
 
 func main() {
