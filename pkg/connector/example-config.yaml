@@ -1,0 +1,7 @@
+# Portal URL pre-filled in the login form, e.g. https://portal.example.com
+default_portal_url: ""
+# How many recent chats to sync (create rooms for) when connecting.
+initial_chat_limit: 30
+# Max members to sync for group chats. Large chats (e.g. the company-wide "general" chat)
+# can have thousands of members.
+max_member_sync: 200
