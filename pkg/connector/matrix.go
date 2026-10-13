@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/bridgev2/networkid"
@@ -14,6 +16,7 @@ import (
 
 func (bc *BitrixClient) HandleMatrixMessage(ctx context.Context, msg *bridgev2.MatrixMessage) (*bridgev2.MatrixMessageResponse, error) {
 	dialogID := string(msg.Portal.ID)
+	bc.stopTyping(dialogID)
 	var replyID int64
 	if msg.ReplyTo != nil {
 		replyID = parseMessageID(msg.ReplyTo.ID)
@@ -135,9 +138,61 @@ func (bc *BitrixClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridge
 	return bc.client.ReadDialog(ctx, string(msg.Portal.ID), parseMessageID(target.ID))
 }
 
+// Bitrix shows "typing" for 35s after each im.dialog.writing call and has no way to stop it early.
+// While Matrix says the user is typing, the ping is repeated so long drafts stay visible. Beeper
+// doesn't always send typing=false (e.g. when a chat is closed with a draft), so repeats are capped.
+const (
+	typingRepeatInterval = 15 * time.Second
+	typingRepeatMax      = time.Minute
+)
+
 func (bc *BitrixClient) HandleMatrixTyping(ctx context.Context, msg *bridgev2.MatrixTyping) error {
+	dialogID := string(msg.Portal.ID)
+	bc.typingLock.Lock()
+	if stop, ok := bc.typingStops[dialogID]; ok {
+		stop()
+		delete(bc.typingStops, dialogID)
+	}
 	if !msg.IsTyping || msg.Type != bridgev2.TypingTypeText || bc.meta().Invisible {
+		bc.typingLock.Unlock()
 		return nil
 	}
-	return bc.client.Writing(ctx, string(msg.Portal.ID))
+	loopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), typingRepeatMax)
+	bc.typingStops[dialogID] = cancel
+	bc.typingLock.Unlock()
+
+	if err := bc.client.Writing(ctx, dialogID); err != nil {
+		cancel()
+		return err
+	}
+	go func() {
+		defer cancel()
+		ticker := time.NewTicker(typingRepeatInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-loopCtx.Done():
+				return
+			case <-ticker.C:
+				if bc.meta().Invisible {
+					return
+				}
+				if err := bc.client.Writing(loopCtx, dialogID); err != nil {
+					zerolog.Ctx(ctx).Debug().Err(err).Msg("Failed to repeat typing notification")
+					return
+				}
+			}
+		}
+	}()
+	return nil
+}
+
+// stopTyping ends the typing repeater, e.g. after a message was sent.
+func (bc *BitrixClient) stopTyping(dialogID string) {
+	bc.typingLock.Lock()
+	defer bc.typingLock.Unlock()
+	if stop, ok := bc.typingStops[dialogID]; ok {
+		stop()
+		delete(bc.typingStops, dialogID)
+	}
 }

@@ -2,6 +2,6 @@
 default_portal_url: ""
 # How many recent chats to sync (create rooms for) when connecting.
 initial_chat_limit: 30
-# Max members to sync for group chats. Large chats (e.g. the company-wide "general" chat)
-# can have thousands of members.
-max_member_sync: 200
+# Group chats with more members than this don't sync their member list up front; members show
+# up as they post. Syncing members is slow (several Matrix requests per member) and blocks the chat.
+max_member_sync: 50

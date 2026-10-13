@@ -35,6 +35,9 @@ type BitrixClient struct {
 
 	deletesLock   sync.Mutex
 	matrixDeletes map[int64]time.Time
+
+	typingLock  sync.Mutex
+	typingStops map[string]context.CancelFunc
 }
 
 var (
@@ -55,6 +58,7 @@ func newBitrixClient(main *BitrixConnector, login *bridgev2.UserLogin, client *b
 		dialogs:   make(map[int64]string),
 
 		matrixDeletes: make(map[int64]time.Time),
+		typingStops:   make(map[string]context.CancelFunc),
 	}
 	client.OnSessionChange = bc.saveSession
 	return bc
@@ -298,6 +302,17 @@ func (bc *BitrixClient) GetChatInfo(ctx context.Context, portal *bridgev2.Portal
 		info.Avatar = bc.makeAvatar(avatarURL)
 	} else {
 		info.Avatar = &bridgev2.Avatar{Remove: true}
+	}
+	// Creating a ghost per member takes several Matrix requests each and blocks the portal, so big
+	// chats only list members once they post.
+	if chat.UserCounter > bc.Main.Config.MaxMemberSync {
+		info.Members = &bridgev2.ChatMemberList{
+			TotalMemberCount: chat.UserCounter,
+			Members: []bridgev2.ChatMember{
+				{EventSender: bc.sender(bc.client.UserID), Membership: event.MembershipJoin},
+			},
+		}
+		return info, nil
 	}
 	users, err := bc.client.DialogUsers(ctx, dialogID)
 	if err != nil {

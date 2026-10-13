@@ -52,7 +52,7 @@ func (bc *BitrixConnector) Init(bridge *bridgev2.Bridge) {
 		bc.Config.InitialChatLimit = 30
 	}
 	if bc.Config.MaxMemberSync == 0 {
-		bc.Config.MaxMemberSync = 200
+		bc.Config.MaxMemberSync = 50
 	}
 }
 
