@@ -68,3 +68,7 @@ Read-only: logs in, lists recent chats, loads a few messages and prints raw push
   websocket frames). Run with `logging.min_level: trace` to see raw push events.
 - Uploads over 5 MB use chunked Content-Range requests, which haven't been verified yet.
 - No captcha / 2FA login flow. No open lines, calls, channels/comments threads or polls.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Built on [mautrix-go](https://github.com/mautrix/go) (MPL-2.0).
