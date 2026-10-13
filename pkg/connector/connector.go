@@ -60,9 +60,10 @@ func (bc *BitrixConnector) Start(ctx context.Context) error {
 
 func (bc *BitrixConnector) GetName() bridgev2.BridgeName {
 	return bridgev2.BridgeName{
-		DisplayName:          "Bitrix24",
-		NetworkURL:           "https://www.bitrix24.com",
-		NetworkIcon:          "",
+		DisplayName: "Bitrix24",
+		NetworkURL:  "https://www.bitrix24.com",
+		// assets/bitrix24.png, uploaded to the Beeper media repo
+		NetworkIcon:          "mxc://local.beeper.com/weeebdev_492sCiEpxNtUNhsVI08GUdH1gdk3vUFUkTJBO7mF10Fq1Em6lmY2AFcK5fGaxhmm",
 		NetworkID:            "bitrix",
 		BeeperBridgeType:     "github.com/adil/mautrix-bitrix",
 		DefaultPort:          29340,
@@ -71,7 +72,7 @@ func (bc *BitrixConnector) GetName() bridgev2.BridgeName {
 }
 
 func (bc *BitrixConnector) GetBridgeInfoVersion() (info, capabilities int) {
-	return 1, 2
+	return 2, 2
 }
 
 func (bc *BitrixConnector) GetCapabilities() *bridgev2.NetworkGeneralCapabilities {
