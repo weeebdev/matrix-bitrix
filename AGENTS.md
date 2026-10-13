@@ -27,6 +27,16 @@ belong to colleagues. Treat it with care.
   `git diff --cached | grep -nE 'sessid|token|PASSWORD|PHPSESSID|UIDD|<portal-domain>'`.
 - The repo is public: anything committed is visible to everyone, forever.
 
+## Environments
+
+- **prod**: Beeper registration `sh-bitrix`, deployed to the k3s cluster from the `nix` repo
+  (`kubernetes/apps/mautrix-bitrix`). It's logged in to the corporate account. Don't re-register it
+  or run it anywhere else: two copies on one registration fight over the Beeper websocket.
+- **dev**: registration `sh-bitrix-dev`, run locally with `./dev.sh start|stop|restart|status|logs`.
+  Its config and DB live in `dev/` (gitignored). Keep it **logged out** of the corporate Bitrix
+  account while prod runs; two sessions on one account fight over the push channel and duplicate
+  every chat in Beeper. Log in only briefly, for a specific test.
+
 ## Building
 
 - Go isn't installed globally: `nix shell nixpkgs#go -c ./build.sh` (uses the `goolm` tag).
