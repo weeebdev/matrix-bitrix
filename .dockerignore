@@ -1,0 +1,10 @@
+# Never bake runtime state or credentials into the image (see AGENTS.md).
+config.yaml
+registration.yaml
+*.db
+*.db-*
+logs/
+*.har
+/mautrix-bitrix
+/bitrix-probe
+.git
