@@ -12,7 +12,6 @@ import (
 	"maunium.net/go/mautrix/bridgev2/commands"
 	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/bridgev2/networkid"
-	"maunium.net/go/mautrix/event"
 
 	"github.com/weeebdev/matrix-bitrix/pkg/bitrix"
 )
@@ -20,6 +19,7 @@ import (
 type BitrixConnector struct {
 	br     *bridgev2.Bridge
 	Config Config
+	sealer *contentSealer
 }
 
 var _ bridgev2.NetworkConnector = (*BitrixConnector)(nil)
@@ -57,6 +57,15 @@ func (bc *BitrixConnector) Init(bridge *bridgev2.Bridge) {
 }
 
 func (bc *BitrixConnector) Start(ctx context.Context) error {
+	var err error
+	if bc.sealer, err = newContentSealerFromEnv(); err != nil {
+		return err
+	} else if bc.sealer == nil {
+		bc.br.Log.Warn().Msg(contentKeyEnv + " not set: message content won't be stored, so keep-deleted and show-edits are degraded")
+	}
+	if err = bc.wipePlaintextContent(ctx); err != nil {
+		return fmt.Errorf("failed to wipe plaintext message content: %w", err)
+	}
 	if proc, ok := bc.br.Commands.(*commands.Processor); ok {
 		proc.AddHandlers(cmdDeleteEmptyPortals, cmdInvisible, cmdKeepDeleted, cmdShowEdits, cmdPause, cmdResume)
 	}
@@ -111,10 +120,9 @@ type UserLoginMetadata struct {
 // MessageMetadata keeps the bridged content of each message part, so a message deleted in
 // Bitrix can be marked as deleted in place instead of disappearing.
 type MessageMetadata struct {
-	Content *event.MessageEventContent `json:"content,omitempty"`
-	Deleted bool                       `json:"deleted,omitempty"`
-	// Previous plain-text versions, newest first (see show-edits).
-	EditHistory []string `json:"edit_history,omitempty"`
+	// Encrypted storedContent (see sealed.go): the bridged content and previous versions.
+	Sealed  string `json:"sealed,omitempty"`
+	Deleted bool   `json:"deleted,omitempty"`
 }
 
 type PortalMetadata struct {

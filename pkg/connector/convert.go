@@ -54,8 +54,11 @@ func (bc *BitrixClient) convertMessage(ctx context.Context, portal *bridgev2.Por
 		part := bc.convertFile(ctx, portal, intent, fileID, data.Files[fileID])
 		cm.Parts = append(cm.Parts, part)
 	}
-	for _, part := range cm.Parts {
-		part.DBMetadata = &MessageMetadata{Content: part.Content}
+	// Own messages aren't stored: deleting your own message always removes it.
+	if msg.Sender() != bc.client.UserID {
+		for _, part := range cm.Parts {
+			part.DBMetadata = &MessageMetadata{Sealed: bc.sealContent(makeMessageID(int64(msg.ID)), part.ID, &storedContent{Content: part.Content})}
+		}
 	}
 	if len(cm.Parts) == 0 {
 		cm.Parts = append(cm.Parts, &bridgev2.ConvertedMessagePart{
@@ -151,20 +154,24 @@ func (bc *BitrixClient) convertEdit(ctx context.Context, portal *bridgev2.Portal
 		return nil, fmt.Errorf("%w: no text part to edit", bridgev2.ErrIgnoringRemoteEvent)
 	}
 	content := bbcodeToMatrix(strings.TrimSpace(data.Msg.Text), bc.mentionResolver)
-	newMeta := &MessageMetadata{Content: content}
-	if old, ok := target.Metadata.(*MessageMetadata); ok {
-		newMeta.EditHistory = old.EditHistory
+	shown := content
+	if old := bc.openContent(target); old != nil {
+		history := old.EditHistory
 		if old.Content != nil && old.Content.Body != content.Body {
-			newMeta.EditHistory = append([]string{old.Content.Body}, old.EditHistory...)
-			if len(newMeta.EditHistory) > maxEditHistory {
-				newMeta.EditHistory = newMeta.EditHistory[:maxEditHistory]
+			history = append([]string{old.Content.Body}, old.EditHistory...)
+			if len(history) > maxEditHistory {
+				history = history[:maxEditHistory]
 			}
 		}
-	}
-	target.Metadata = newMeta
-	shown := content
-	if bc.meta().ShowEditsEnabled() && len(newMeta.EditHistory) > 0 {
-		shown = withEditHistory(content, newMeta.EditHistory)
+		meta, _ := target.Metadata.(*MessageMetadata)
+		if meta == nil {
+			meta = &MessageMetadata{}
+			target.Metadata = meta
+		}
+		meta.Sealed = bc.sealContent(target.ID, target.PartID, &storedContent{Content: content, EditHistory: history})
+		if bc.meta().ShowEditsEnabled() && len(history) > 0 {
+			shown = withEditHistory(content, history)
+		}
 	}
 	return &bridgev2.ConvertedEdit{
 		ModifiedParts: []*bridgev2.ConvertedEditPart{{

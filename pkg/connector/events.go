@@ -258,7 +258,8 @@ func (bc *BitrixClient) handleMessageDelete(ctx context.Context, raw json.RawMes
 		return nil
 	}
 	messageID := int64(p.ID)
-	if bc.meta().KeepDeletedEnabled() && !bc.wasDeletedFromMatrix(messageID) {
+	// Own messages aren't stored and are always removed, wherever they were deleted.
+	if bc.meta().KeepDeletedEnabled() && !bc.wasDeletedFromMatrix(messageID) && int64(p.SenderID) != bc.client.UserID {
 		return bc.markDeleted(ctx, key, messageID, int64(p.SenderID))
 	}
 	bc.UserLogin.Bridge.QueueRemoteEvent(bc.UserLogin, &simplevent.MessageRemove{
@@ -286,7 +287,7 @@ func (bc *BitrixClient) markDeleted(ctx context.Context, key networkid.PortalKey
 		meta, ok := part.Metadata.(*MessageMetadata)
 		if ok && meta.Deleted {
 			return nil // messageDelete and messageDeleteComplete both arrive for one delete
-		} else if ok && meta.Content != nil {
+		} else if bc.openContent(part) != nil {
 			canEdit = true
 		}
 	}
@@ -307,13 +308,14 @@ func (bc *BitrixClient) markDeleted(ctx context.Context, key networkid.PortalKey
 			edit := &bridgev2.ConvertedEdit{}
 			for _, part := range existing {
 				meta, ok := part.Metadata.(*MessageMetadata)
-				if !ok || meta.Content == nil || meta.Deleted {
+				stored := bc.openContent(part)
+				if !ok || stored == nil || stored.Content == nil || meta.Deleted {
 					continue
 				}
 				edit.ModifiedParts = append(edit.ModifiedParts, &bridgev2.ConvertedEditPart{
 					Part:    part,
 					Type:    event.EventMessage,
-					Content: deletedContent(meta.Content),
+					Content: deletedContent(stored.Content),
 				})
 				meta.Deleted = true
 			}

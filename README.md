@@ -51,6 +51,14 @@ Bot commands (in the bridge bot chat, which Beeper may show under your own name)
 - `pause` / `resume`: disconnect from Bitrix and stop bridging, e.g. while testing a dev bridge;
   survives restarts
 
+`keep-deleted` and `show-edits` need the content of other people's messages kept in the bridge
+database. It's encrypted with AES-256-GCM using a key from the `CONTENT_ENCRYPTION_KEY`
+environment variable (`openssl rand -base64 32`), which never touches the database, so snapshots
+and backups only hold ciphertext. Your own messages aren't stored. Without the key nothing is
+stored: deletes get a reply notice and edits show only the latest version. Don't rotate the key:
+stored copies become unreadable. Versions before 0.1.7 stored this content in plaintext; 0.1.7
+wipes it on first start (earlier database snapshots and backups still contain it).
+
 The login password is stored in the bridge database so the bridge can re-login when the PHP
 session expires. Keep `config.yaml` and the `.db` file private.
 
