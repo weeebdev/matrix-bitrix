@@ -11,6 +11,11 @@ import (
 	"github.com/adil/mautrix-bitrix/pkg/bitrix"
 )
 
+// backfillHint is passed from the recent-chat sync to the initial backfill.
+type backfillHint struct {
+	Unread bool
+}
+
 func (bc *BitrixClient) FetchMessages(ctx context.Context, params bridgev2.FetchMessagesParams) (*bridgev2.FetchMessagesResponse, error) {
 	chatID, err := bc.chatIDFor(ctx, params.Portal)
 	if err != nil {
@@ -44,6 +49,9 @@ func (bc *BitrixClient) FetchMessages(ctx context.Context, params bridgev2.Fetch
 	resp := &bridgev2.FetchMessagesResponse{
 		Forward: params.Forward,
 		HasMore: len(msgs) >= count,
+	}
+	if hint, ok := params.BundledData.(*backfillHint); ok && params.Forward {
+		resp.MarkRead = !hint.Unread
 	}
 	for _, m := range msgs {
 		if params.Forward && anchor != 0 && int64(m.ID) <= anchor {

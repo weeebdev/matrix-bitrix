@@ -228,9 +228,23 @@ func (bc *BitrixClient) syncRecentChats(ctx context.Context) {
 				PortalKey:    bc.portalKey(dialogID),
 				CreatePortal: true,
 			},
-			GetChatInfoFunc: bc.GetChatInfo,
-			LatestMessageTS: ts,
+			GetChatInfoFunc:     bc.GetChatInfo,
+			LatestMessageTS:     ts,
+			BundledBackfillData: &backfillHint{Unread: item.Counter > 0 || item.Unread},
 		})
+		// Mirror Bitrix's read state: chats read elsewhere (or before the bridge existed) are
+		// marked read on Matrix up to their last message.
+		if item.Counter == 0 && !item.Unread && item.Message.ID != 0 {
+			bc.UserLogin.Bridge.QueueRemoteEvent(bc.UserLogin, &simplevent.Receipt{
+				EventMeta: simplevent.EventMeta{
+					Type:      bridgev2.RemoteEventReadReceipt,
+					PortalKey: bc.portalKey(dialogID),
+					Sender:    bc.sender(bc.client.UserID),
+					Timestamp: ts,
+				},
+				LastTarget: makeMessageID(int64(item.Message.ID)),
+			})
+		}
 	}
 	log.Info().Int("count", len(recent.Items)).Msg("Queued recent chat sync")
 }
