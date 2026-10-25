@@ -148,6 +148,30 @@ func (c *Client) RefreshSession(ctx context.Context) error {
 	return nil
 }
 
+var (
+	reLoginError = regexp.MustCompile(`(?is)class="[^"]*(?:errortext|error-text|login-error|auth-error|alert-danger)[^"]*"[^>]*>(.{0,600}?)</(?:div|p|span|font)>`)
+	reHTMLTag    = regexp.MustCompile(`<[^>]*>`)
+	reSpaces     = regexp.MustCompile(`\s+`)
+)
+
+// loginFailureReason describes why the portal didn't accept a login, from the page it answered
+// the login form with. It never includes the submitted credentials.
+func loginFailureReason(resp *http.Response, page []byte) string {
+	if strings.Contains(string(page), "captcha_sid") {
+		return "portal asks for a captcha"
+	}
+	if m := reLoginError.FindSubmatch(page); m != nil {
+		text := strings.TrimSpace(reSpaces.ReplaceAllString(reHTMLTag.ReplaceAllString(string(m[1]), " "), " "))
+		if text != "" {
+			if r := []rune(text); len(r) > 200 {
+				text = string(r[:200])
+			}
+			return "portal says: " + text
+		}
+	}
+	return fmt.Sprintf("no session after submitting the login form (HTTP %d on %s)", resp.StatusCode, resp.Request.URL.Path)
+}
+
 // PasswordLogin submits the standard Bitrix login form.
 func (c *Client) PasswordLogin(ctx context.Context, login, password string) error {
 	// Prime PHPSESSID
@@ -179,12 +203,12 @@ func (c *Client) PasswordLogin(ctx context.Context, login, password string) erro
 	if err != nil {
 		return fmt.Errorf("failed to submit login form: %w", err)
 	}
-	_, _ = io.Copy(io.Discard, resp.Body)
+	page, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	_ = resp.Body.Close()
 
 	err = c.RefreshSession(ctx)
 	if errors.Is(err, ErrNotLoggedIn) {
-		return ErrInvalidLogin
+		return fmt.Errorf("%w: %s", ErrInvalidLogin, loginFailureReason(resp, page))
 	} else if err != nil {
 		return err
 	}

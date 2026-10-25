@@ -78,7 +78,7 @@ func (pl *PasswordLogin) SubmitUserInput(ctx context.Context, input map[string]s
 		}
 	}
 	if err = client.PasswordLogin(ctx, input["login"], input["password"]); errors.Is(err, bitrix.ErrInvalidLogin) {
-		return nil, fmt.Errorf("invalid login or password (if the portal shows a captcha or 2FA, log in once in a browser first)")
+		return nil, fmt.Errorf("%w (if the portal shows a captcha or 2FA, log in once in a browser first)", err)
 	} else if err != nil {
 		return nil, err
 	}
