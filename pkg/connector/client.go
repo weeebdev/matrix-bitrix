@@ -80,43 +80,103 @@ func (bc *BitrixClient) Connect(ctx context.Context) {
 		return
 	}
 	bc.sendState(status.BridgeState{StateEvent: status.StateConnecting})
+	bc.stateLock.Lock()
+	if bc.stopPull != nil {
+		bc.stopPull()
+	}
+	runCtx, cancel := context.WithCancel(log.WithContext(context.Background()))
+	bc.stopPull = cancel
+	bc.stateLock.Unlock()
+
 	if err := bc.client.EnsureSession(ctx); err != nil {
 		log.Err(err).Msg("Failed to establish Bitrix session")
-		if errors.Is(err, bitrix.ErrInvalidLogin) || errors.Is(err, bitrix.ErrNotLoggedIn) {
-			bc.sendState(status.BridgeState{
-				StateEvent: status.StateBadCredentials,
-				Error:      "bitrix-invalid-auth",
-				Message:    "Bitrix session expired and re-login failed, please log in again",
-			})
-		} else {
-			bc.sendState(status.BridgeState{
-				StateEvent: status.StateTransientDisconnect,
-				Error:      "bitrix-connect-failed",
-				Message:    err.Error(),
-			})
-		}
+		// Retry in the background: Connect is called synchronously during bridge startup.
+		go func() {
+			if bc.retryLogin(runCtx, err) == nil {
+				bc.startPull(runCtx, cancel)
+			}
+		}()
 		return
 	}
+	bc.startPull(runCtx, cancel)
+}
+
+// reloginBackoff is the wait before each re-login attempt after the session was lost. The portal
+// rejects even the right password while its login backend is down (seen during night
+// maintenance), so a rejection isn't final. The gaps keep failed attempts far below typical
+// account lockout limits. Total is about 8 hours.
+var reloginBackoff = []time.Duration{
+	time.Minute, 5 * time.Minute, 15 * time.Minute, 30 * time.Minute,
+	time.Hour, time.Hour, 2 * time.Hour, 2 * time.Hour,
+}
+
+func isAuthFailure(err error) bool {
+	return errors.Is(err, bitrix.ErrInvalidLogin) || errors.Is(err, bitrix.ErrNotLoggedIn)
+}
+
+// retryLogin retries EnsureSession on the reloginBackoff schedule after it failed with err.
+// It returns nil once the session works again. When the schedule runs out (or ctx is cancelled)
+// it sends the final bridge state and returns the last error.
+func (bc *BitrixClient) retryLogin(ctx context.Context, err error) error {
+	log := bc.UserLogin.Log
+	for _, wait := range reloginBackoff {
+		log.Warn().Err(err).Dur("retry_in", wait).Msg("Bitrix session unavailable, retrying later")
+		code := status.BridgeStateErrorCode("bitrix-connect-failed")
+		if isAuthFailure(err) {
+			code = "bitrix-relogin-retry"
+		}
+		bc.sendState(status.BridgeState{
+			StateEvent: status.StateTransientDisconnect,
+			Error:      code,
+			Message:    fmt.Sprintf("%v. Retrying at %s", err, time.Now().Add(wait).Format("15:04 MST")),
+		})
+		select {
+		case <-time.After(wait):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		if err = bc.client.EnsureSession(ctx); err == nil {
+			log.Info().Msg("Bitrix session restored")
+			return nil
+		}
+	}
+	bc.stateLock.Lock()
+	bc.loggedIn = false
+	bc.stateLock.Unlock()
+	if isAuthFailure(err) {
+		bc.sendState(status.BridgeState{
+			StateEvent: status.StateBadCredentials,
+			Error:      "bitrix-invalid-auth",
+			Message:    fmt.Sprintf("Bitrix re-login kept failing (%v), please log in again", err),
+		})
+	} else {
+		bc.sendState(status.BridgeState{
+			StateEvent: status.StateTransientDisconnect,
+			Error:      "bitrix-connect-failed",
+			Message:    err.Error(),
+		})
+	}
+	return err
+}
+
+// startPull runs the push connection until runCtx is cancelled.
+func (bc *BitrixClient) startPull(runCtx context.Context, cancel context.CancelFunc) {
+	log := bc.UserLogin.Log
 	// Logins made before the account avatar existed get it on connect.
 	if bc.UserLogin.RemoteProfile.Avatar == "" {
 		bc.UserLogin.RemoteProfile.Avatar = networkIcon
-		if err := bc.UserLogin.Save(ctx); err != nil {
+		if err := bc.UserLogin.Save(runCtx); err != nil {
 			log.Err(err).Msg("Failed to save remote profile")
 		}
 	}
 	bc.stateLock.Lock()
 	bc.loggedIn = true
-	if bc.stopPull != nil {
-		bc.stopPull()
-	}
-	pullCtx, cancel := context.WithCancel(log.WithContext(context.Background()))
-	bc.stopPull = cancel
 	bc.stateLock.Unlock()
 
 	pull := bc.client.NewPullClient(log.With().Str("component", "pull").Logger(), bc.handlePullEvent)
 	pull.OnConnect = func() {
 		bc.sendState(status.BridgeState{StateEvent: status.StateConnected})
-		go bc.syncRecentChats(pullCtx)
+		go bc.syncRecentChats(runCtx)
 	}
 	pull.OnDisconnect = func(err error) {
 		msg := "push connection lost"
@@ -129,16 +189,15 @@ func (bc *BitrixClient) Connect(ctx context.Context) {
 			Message:    msg,
 		})
 		// The push config fetch can fail because the session expired; refresh it before retrying.
-		if refreshErr := bc.client.EnsureSession(pullCtx); errors.Is(refreshErr, bitrix.ErrInvalidLogin) || errors.Is(refreshErr, bitrix.ErrNotLoggedIn) {
-			bc.sendState(status.BridgeState{
-				StateEvent: status.StateBadCredentials,
-				Error:      "bitrix-invalid-auth",
-				Message:    "Bitrix session expired and re-login failed, please log in again",
-			})
-			cancel()
+		// Other errors are left to the pull client's own retries.
+		if refreshErr := bc.client.EnsureSession(runCtx); isAuthFailure(refreshErr) {
+			bc.UserLogin.Log.Err(refreshErr).Msg("Bitrix re-login failed")
+			if bc.retryLogin(runCtx, refreshErr) != nil {
+				cancel()
+			}
 		}
 	}
-	go pull.Run(pullCtx)
+	go pull.Run(runCtx)
 }
 
 func (bc *BitrixClient) Disconnect() {
