@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"time"
 
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/networkid"
@@ -54,6 +55,16 @@ func (bc *BitrixClient) FetchMessages(ctx context.Context, params bridgev2.Fetch
 		Forward: params.Forward,
 		HasMore: len(msgs) >= count,
 	}
+	if len(msgs) > 0 {
+		edge := msgs[0].ID
+		if params.Forward {
+			edge = msgs[len(msgs)-1].ID
+		}
+		resp.Cursor = networkid.PaginationCursor(edge.String())
+	}
+	if !params.Forward {
+		msgs = bc.trimBackwardBatch(msgs, anchor, resp)
+	}
 	if hint, ok := params.BundledData.(*backfillHint); ok && params.Forward {
 		resp.MarkRead = !hint.Unread
 	}
@@ -78,12 +89,29 @@ func (bc *BitrixClient) FetchMessages(ctx context.Context, params bridgev2.Fetch
 			Reactions:        reactions[int64(m.ID)],
 		})
 	}
-	if len(msgs) > 0 {
-		edge := msgs[0].ID
-		if params.Forward {
-			edge = msgs[len(msgs)-1].ID
-		}
-		resp.Cursor = networkid.PaginationCursor(edge.String())
-	}
 	return resp, nil
+}
+
+// trimBackwardBatch drops messages that aren't older than the anchor (so a misbehaving page
+// can't make the queue loop) and messages older than backfill_max_days, which also ends the
+// backfill for the chat.
+func (bc *BitrixClient) trimBackwardBatch(msgs []*bitrix.Message, anchor int64, resp *bridgev2.FetchMessagesResponse) []*bitrix.Message {
+	var cutoff time.Time
+	if days := bc.Main.Config.BackfillMaxDays; days > 0 {
+		cutoff = time.Now().AddDate(0, 0, -days)
+	}
+	kept := msgs[:0:0]
+	for _, m := range msgs {
+		switch {
+		case anchor != 0 && int64(m.ID) >= anchor:
+		case !cutoff.IsZero() && !m.Date.IsZero() && m.Date.Before(cutoff):
+			resp.HasMore = false
+		default:
+			kept = append(kept, m)
+		}
+	}
+	if len(kept) == 0 {
+		resp.HasMore = false
+	}
+	return kept
 }

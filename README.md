@@ -9,7 +9,7 @@ talks to the same internal API as the web messenger (reverse-engineered from a b
 | Piece | Bitrix side |
 |---|---|
 | Login | `POST /auth/?login=yes` form (LDAP/password), CSRF token `bitrix_sessid` scraped from `/stream/` |
-| Session refresh | cookies persisted; on `invalid_csrf`/`NO_AUTH` the token is re-fetched, then a password re-login |
+| Session refresh | cookies persisted; on `invalid_csrf`/`NO_AUTH` the token is re-fetched, then a password re-login. A rejected re-login is retried for about 8 hours with growing gaps (1 min to 2 h) before the login goes to `BAD_CREDENTIALS`: the portal also rejects good passwords while its login backend is down. The portal's reason (error text, captcha) is logged. |
 | Real-time | `pull.config.get` → websocket `wss://<portal>/bitrix/subws/?CHANNEL_ID=…&revision=19` (text mode, `#!NGINXNMS!#{json}#!NGINXNME!#` frames) |
 | Chat list | `/rest/im.recent.list.json` |
 | Chat info / history | `ajax.php?action=im.v2.Chat.load`, `im.v2.Chat.Message.list`, `im.v2.Chat.Message.tail` |
@@ -63,6 +63,14 @@ content doesn't linger in free pages (earlier snapshots and backups still contai
 
 The login password is stored in the bridge database so the bridge can re-login when the PHP
 session expires. Keep `config.yaml` and the `.db` file private.
+
+## History backfill
+
+New chats get the latest `backfill.max_initial_messages`. Older history comes from the backfill
+queue: set `backfill.queue.enabled: true` and `max_batches: -1` (with `max_batches: 0` the queue
+never fetches anything, and its tasks are re-dispatched every `batch_delay` forever). The
+connector stops each chat at `network.backfill_max_days` (default 365). Each batch is one
+`im.v2.Chat.Message.tail` request, one chat at a time, `batch_delay` seconds apart.
 
 ## Smoke test without Matrix
 

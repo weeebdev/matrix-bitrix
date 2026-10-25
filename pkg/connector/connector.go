@@ -34,12 +34,15 @@ type Config struct {
 	InitialChatLimit int `yaml:"initial_chat_limit"`
 	// Max members to sync for group chats (large "general" chats can have thousands).
 	MaxMemberSync int `yaml:"max_member_sync"`
+	// How far back the backfill queue fetches history, in days. Negative means no limit.
+	BackfillMaxDays int `yaml:"backfill_max_days"`
 }
 
 func upgradeConfig(helper configupgrade.Helper) {
 	helper.Copy(configupgrade.Str, "default_portal_url")
 	helper.Copy(configupgrade.Int, "initial_chat_limit")
 	helper.Copy(configupgrade.Int, "max_member_sync")
+	helper.Copy(configupgrade.Int, "backfill_max_days")
 }
 
 func (bc *BitrixConnector) GetConfig() (example string, data any, upgrader configupgrade.Upgrader) {
@@ -53,6 +56,9 @@ func (bc *BitrixConnector) Init(bridge *bridgev2.Bridge) {
 	}
 	if bc.Config.MaxMemberSync == 0 {
 		bc.Config.MaxMemberSync = 50
+	}
+	if bc.Config.BackfillMaxDays == 0 {
+		bc.Config.BackfillMaxDays = 365
 	}
 }
 
